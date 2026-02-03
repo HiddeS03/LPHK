@@ -16,6 +16,7 @@ LEGACY_SCRIPT_EXT = ".LPHKscript"
 USER_PATH = None
 LAYOUT_PATH = None
 SCRIPT_PATH = None
+LAST_LAYOUT_FILE = None
 
 import window
 
@@ -27,9 +28,34 @@ def init(user_path_in):
     global USER_PATH
     global LAYOUT_PATH
     global SCRIPT_PATH
+    global LAST_LAYOUT_FILE
     USER_PATH = user_path_in
     LAYOUT_PATH = os.path.join(USER_PATH, LAYOUT_DIR)
     SCRIPT_PATH = os.path.join(USER_PATH, SCRIPT_DIR)
+    LAST_LAYOUT_FILE = os.path.join(USER_PATH, "last_layout.txt")
+
+def save_last_layout(layout_path):
+    """Save the path of the last loaded layout"""
+    try:
+        with open(LAST_LAYOUT_FILE, "w") as f:
+            f.write(layout_path)
+    except Exception as e:
+        print(f"[files] Could not save last layout path: {e}")
+
+def get_last_layout():
+    """Get the path of the last loaded layout, or None if not available"""
+    try:
+        if os.path.exists(LAST_LAYOUT_FILE):
+            with open(LAST_LAYOUT_FILE, "r") as f:
+                last_path = f.read().strip()
+            # Check if the layout file still exists
+            if os.path.exists(last_path):
+                return last_path
+            else:
+                print(f"[files] Last layout file no longer exists: {last_path}")
+    except Exception as e:
+        print(f"[files] Could not load last layout path: {e}")
+    return None
 
 def save_layout(layout, name, printing=True):
     with open(name, "w") as f:
@@ -166,6 +192,8 @@ def load_layout_to_lp(name, popups=True, save_converted=True, preload=None):
     window.app.draw_canvas()
         
     curr_layout = name
+    # Save this as the last loaded layout
+    save_last_layout(name)
     if converted_to_rg:
         if popups:
             window.app.popup(window.app, "Layout converted to Classic/Mini/S...", window.app.info_image, "The colors in this layout have been converted to be\ncompatable with the Launchpad Classic/Mini/S.\n\nChanges have not yet been saved to the file.", "OK")

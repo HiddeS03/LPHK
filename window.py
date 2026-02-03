@@ -211,8 +211,13 @@ class Main_Window(tk.Frame):
             self.enable_menu("Layout")
             self.stat["text"] = f"Connected to {lpcon.get_display_name(lp)}"
             self.stat["bg"] = STAT_ACTIVE_COLOR
-            # search for a startup layout and load it
-            if os.path.isfile(os.path.join(files.LAYOUT_PATH, "startup.lpl")):
+            # Auto-load the last used layout if available
+            last_layout = files.get_last_layout()
+            if last_layout:
+                print(f"[window] Auto-loading last layout: {last_layout}")
+                files.load_layout_to_lp(last_layout)
+            # Otherwise, search for a startup layout and load it
+            elif os.path.isfile(os.path.join(files.LAYOUT_PATH, "startup.lpl")):
                 files.load_layout_to_lp(os.path.join(files.LAYOUT_PATH, "startup.lpl"))
 
     def disconnect_lp(self):
