@@ -123,6 +123,11 @@ def shutdown():
         lp_events.timer.cancel()
         launchpad_connector.disconnect(lp)
         window.lp_connected = False
+    
+    # Stop the tray icon if it exists
+    if window.tray_icon is not None:
+        window.tray_icon.stop()
+    
     logger.stop()
     if window.restart:
         if IS_EXE:

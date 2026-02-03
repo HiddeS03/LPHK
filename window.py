@@ -4,6 +4,9 @@ from PIL import ImageTk, Image
 import os, sys
 from functools import partial
 import webbrowser
+import threading
+import pystray
+from pystray import MenuItem as item
 
 import scripts, files, lp_colors, lp_events
 from utils import launchpad_connector as lpcon
@@ -36,6 +39,8 @@ app = None
 root_destroyed = None
 restart = False
 lp_object = None
+tray_icon = None
+tray_thread = None
 
 
 load_layout_filetypes = [('LPHK layout files', [files.LAYOUT_EXT, files.LEGACY_LAYOUT_EXT])]
@@ -702,6 +707,60 @@ class Main_Window(tk.Frame):
             if not layout_empty:
                 self.popup_choice(self, "Save Changes?", self.warning_image, "You have made changes to this layout.\nWould you like to save this layout before exiting?", [["Save", self.save_layout], ["Save As...", self.save_layout_as], ["Discard", None]])
 
+def show_window():
+    """Show the window from tray"""
+    if root is not None:
+        root.deiconify()
+        root.lift()
+        root.focus_force()
+
+
+def hide_window():
+    """Hide the window to tray"""
+    if root is not None:
+        root.withdraw()
+
+
+def quit_app():
+    """Quit the application from tray"""
+    close()
+
+
+def setup_tray_icon():
+    """Setup the system tray icon"""
+    global tray_icon, tray_thread
+    
+    # Load the icon image
+    icon_path = MAIN_ICON
+    if icon_path and os.path.exists(icon_path):
+        # pystray needs a PIL Image, not a path
+        if icon_path.endswith('.ico'):
+            icon_image = Image.open(icon_path)
+        else:
+            icon_image = Image.open(icon_path)
+    else:
+        # Create a simple default icon if none exists
+        icon_image = Image.new('RGB', (64, 64), color='blue')
+    
+    # Create the menu
+    menu = pystray.Menu(
+        item('Show Configuration', show_window, default=True),
+        item('Hide Configuration', hide_window),
+        pystray.Menu.SEPARATOR,
+        item('Exit LPHK', quit_app)
+    )
+    
+    # Create the tray icon
+    tray_icon = pystray.Icon("LPHK", icon_image, "LPHK - LaunchPad HotKey", menu)
+    
+    # Run the tray icon in a separate thread
+    def run_tray():
+        tray_icon.run()
+    
+    tray_thread = threading.Thread(target=run_tray, daemon=True)
+    tray_thread.start()
+
+
 def make():
     global root
     global app
@@ -709,7 +768,7 @@ def make():
     global redetect_before_start
     root = tk.Tk()
     root_destroyed = False
-    root.protocol("WM_DELETE_WINDOW", close)
+    root.protocol("WM_DELETE_WINDOW", hide_window)  # Hide to tray instead of closing
     root.resizable(False, False)
     if MAIN_ICON != None:
         if os.path.splitext(MAIN_ICON)[1].lower() == ".gif":
@@ -719,13 +778,21 @@ def make():
     app = Main_Window(root)
     app.raise_above_all()
     app.after(100, app.connect_lp)
+    
+    # Setup system tray icon
+    setup_tray_icon()
+    
     app.mainloop()
 
 
 def close():
-    global root_destroyed, launchpad
+    global root_destroyed, launchpad, tray_icon
     app.modified_layout_save_prompt()
     app.disconnect_lp()
+
+    # Stop the tray icon
+    if tray_icon is not None:
+        tray_icon.stop()
 
     if not root_destroyed:
         root.destroy()
