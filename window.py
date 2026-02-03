@@ -211,13 +211,14 @@ class Main_Window(tk.Frame):
                 files.load_layout_to_lp(os.path.join(files.LAYOUT_PATH, "startup.lpl"))
 
     def disconnect_lp(self):
-        global lp_connected
+        global lp_connected, restart
         try:
             scripts.unbind_all()
             lp_events.timer.cancel()
             lpcon.disconnect(lp_object)
         except:
-            self.redetect_lp()
+            if not restart:
+                self.redetect_lp()
         lp_connected = False
 
         self.clear_canvas()
