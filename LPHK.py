@@ -46,7 +46,17 @@ if os.path.exists(USERPATH_FILE):
     os.makedirs(USER_PATH, exist_ok=True)
 else:
     IS_PORTABLE = True
-    USER_PATH = PROG_PATH
+    # Check if PROG_PATH is writable, if not use Documents folder
+    try:
+        test_file = os.path.join(PROG_PATH, ".write_test")
+        with open(test_file, 'w') as f:
+            f.write("test")
+        os.remove(test_file)
+        USER_PATH = PROG_PATH
+    except (PermissionError, OSError):
+        # PROG_PATH not writable (e.g., Program Files), use Documents
+        USER_PATH = os.path.join(os.path.expanduser("~"), "Documents", "LPHK")
+        os.makedirs(USER_PATH, exist_ok=True)
 
 # Get program version
 VERSION = get_first_textfile_line(os.path.join(PATH, "VERSION"))

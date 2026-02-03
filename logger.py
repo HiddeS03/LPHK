@@ -32,7 +32,8 @@ class _Logger:
         def __del__(self):
             sys.stdout = self._stdout
         def write(self, data):
-            self._stdout.write(data)
+            if self._stdout is not None:
+                self._stdout.write(data)
             self._file.write(data)
             self._file.flush()
         def flush(self):
@@ -46,7 +47,8 @@ class _Logger:
         def __del__(self):
             sys.stderr = self._stderr
         def write(self, data):
-            self._stderr.write(data)
+            if self._stderr is not None:
+                self._stderr.write(data)
             self._file.write(data)
             self._file.flush()
         def flush(self):
