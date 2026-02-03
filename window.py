@@ -709,21 +709,59 @@ class Main_Window(tk.Frame):
 
 def show_window():
     """Show the window from tray"""
-    if root is not None:
-        root.deiconify()
-        root.lift()
-        root.focus_force()
+    if root is not None and not root_destroyed:
+        try:
+            # Schedule on main thread to avoid "main thread is not in main loop" error
+            root.after(0, lambda: _show_window_impl())
+        except RuntimeError:
+            # Mainloop has already exited
+            pass
+
+def _show_window_impl():
+    """Implementation of show_window - must be called from main thread"""
+    if root is not None and not root_destroyed:
+        try:
+            root.deiconify()
+            root.lift()
+            root.focus_force()
+        except tk.TclError:
+            # Window was already destroyed
+            pass
 
 
 def hide_window():
     """Hide the window to tray"""
-    if root is not None:
-        root.withdraw()
+    if root is not None and not root_destroyed:
+        try:
+            # Schedule on main thread to avoid threading issues
+            root.after(0, lambda: _hide_window_impl())
+        except RuntimeError:
+            # Mainloop has already exited
+            pass
+
+def _hide_window_impl():
+    """Implementation of hide_window - must be called from main thread"""
+    if root is not None and not root_destroyed:
+        try:
+            root.withdraw()
+        except tk.TclError:
+            # Window was already destroyed
+            pass
 
 
 def quit_app():
     """Quit the application from tray"""
-    close()
+    if root is not None and not root_destroyed:
+        try:
+            # Schedule on main thread to avoid threading issues
+            root.after(0, lambda: close())
+        except RuntimeError:
+            # Mainloop has already exited, just stop the tray
+            if tray_icon is not None:
+                try:
+                    tray_icon.stop()
+                except:
+                    pass
 
 
 def setup_tray_icon():
@@ -787,13 +825,32 @@ def make():
 
 def close():
     global root_destroyed, launchpad, tray_icon
-    app.modified_layout_save_prompt()
-    app.disconnect_lp()
-
+    
+    # Prevent double-close
+    if root_destroyed:
+        return
+    
+    # Mark as destroyed early to prevent re-entry
+    root_destroyed = True
+    
+    # Save prompt and disconnect
+    if app is not None:
+        try:
+            app.modified_layout_save_prompt()
+            app.disconnect_lp()
+        except:
+            pass
+    
     # Stop the tray icon
     if tray_icon is not None:
-        tray_icon.stop()
-
-    if not root_destroyed:
-        root.destroy()
-        root_destroyed = True
+        try:
+            tray_icon.stop()
+        except:
+            pass
+    
+    # Destroy the window
+    if root is not None:
+        try:
+            root.destroy()
+        except:
+            pass
