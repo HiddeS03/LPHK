@@ -10,13 +10,14 @@ DELAY_EXIT_CHECK = 0.025
 
 import files
 
-VALID_COMMANDS = ["@ASYNC", "@SIMPLE", "@LOAD_LAYOUT", "STRING", "DELAY", "TAP", "PRESS", "RELEASE", "WEB", "WEB_NEW", "CODE", "SOUND", "SOUND_STOP", "WAIT_UNPRESSED", "M_MOVE", "M_SET", "M_SCROLL", "M_LINE", "M_LINE_MOVE", "M_LINE_SET", "LABEL", "IF_PRESSED_GOTO_LABEL", "IF_UNPRESSED_GOTO_LABEL", "GOTO_LABEL", "REPEAT_LABEL", "IF_PRESSED_REPEAT_LABEL", "IF_UNPRESSED_REPEAT_LABEL", "M_STORE", "M_RECALL", "M_RECALL_LINE", "OPEN", "RELEASE_ALL", "RESET_REPEATS"]
+VALID_COMMANDS = ["@ASYNC", "@SIMPLE", "@LOAD_LAYOUT", "STRING", "DELAY", "TAP", "PRESS", "RELEASE", "TOGGLE_KEY_COLOR", "WEB", "WEB_NEW", "CODE", "SOUND", "SOUND_STOP", "WAIT_UNPRESSED", "M_MOVE", "M_SET", "M_SCROLL", "M_LINE", "M_LINE_MOVE", "M_LINE_SET", "LABEL", "IF_PRESSED_GOTO_LABEL", "IF_UNPRESSED_GOTO_LABEL", "GOTO_LABEL", "REPEAT_LABEL", "IF_PRESSED_REPEAT_LABEL", "IF_UNPRESSED_REPEAT_LABEL", "M_STORE", "M_RECALL", "M_RECALL_LINE", "OPEN", "RELEASE_ALL", "RESET_REPEATS"]
 ASYNC_HEADERS = ["@ASYNC", "@SIMPLE"]
 
 threads = [[None for y in range(9)] for x in range(9)]
 running = False
 to_run = []
 text = [["" for y in range(9)] for x in range(9)]
+toggle_key_color_states = [[False for y in range(9)] for x in range(9)]
 
 def check_kill(x, y, is_async, killfunc=None):
     coords = "(" + str(x) + ", " + str(y) + ")"
@@ -205,6 +206,28 @@ def run_script(script_str, x, y):
                     print("[scripts] " + coords + "    Release key " + split_line[1])
                     key = kb.sp(split_line[1])
                     kb.release(key)
+                elif split_line[0] == "TOGGLE_KEY_COLOR":
+                    key_name = split_line[1].lower()
+                    key = kb.sp(key_name)
+                    if key is None:
+                        print("[scripts] " + coords + "    Invalid key for TOGGLE_KEY_COLOR: " + split_line[1])
+                        return -1
+
+                    color_off = [int(split_line[2]), int(split_line[3]), int(split_line[4])]
+                    color_on = [int(split_line[5]), int(split_line[6]), int(split_line[7])]
+
+                    toggle_key_color_states[x][y] = not toggle_key_color_states[x][y]
+                    if toggle_key_color_states[x][y]:
+                        print("[scripts] " + coords + "    Toggle ON key " + key_name + " and set color " + str(color_on))
+                        kb.press(key)
+                        lp_colors.setXY(x, y, color_on)
+                    else:
+                        print("[scripts] " + coords + "    Toggle OFF key " + key_name + " and set color " + str(color_off))
+                        kb.release(key)
+                        lp_colors.setXY(x, y, color_off)
+
+                    files.layout_changed_since_load = True
+                    lp_colors.updateXY(x, y)
                 elif split_line[0] == "WEB":
                     link = split_line[1]
                     if "http" not in link:
@@ -505,12 +528,14 @@ def bind(x, y, script_down, color):
     schedule_script_bindable = lambda a, b: schedule_script(script_down, x, y)
 
     lp_events.bind_func_with_colors(x, y, schedule_script_bindable, color)
+    toggle_key_color_states[x][y] = False
     text[x][y] = script_down
     files.layout_changed_since_load = True
 
 def unbind(x, y):
     global to_run
     lp_events.unbind(x, y)
+    toggle_key_color_states[x][y] = False
     text[x][y] = ""
     if (x, y) in [l[1:] for l in to_run]:
         indexes = [i for i, v in enumerate(to_run) if ((v[1] == x) and (v[2] == y))]
@@ -575,8 +600,10 @@ def unbind_all():
     global threads
     global text
     global to_run
+    global toggle_key_color_states
     lp_events.unbind_all()
     text = [["" for y in range(9)] for x in range(9)]
+    toggle_key_color_states = [[False for y in range(9)] for x in range(9)]
     to_run = []
     for x in range(9):
         for y in range(9):
@@ -654,7 +681,7 @@ def validate_script(script_str):
                         return ("Headers must only be used on the first line of a script.", line)
                 if split_line[0] not in VALID_COMMANDS:
                     return ("Command '" + split_line[0] + "' not valid.", line)
-                if split_line[0] in ["STRING", "DELAY", "TAP", "PRESS", "RELEASE", "WEB", "WEB_NEW", "CODE", "SOUND", "M_MOVE", "M_SET", "M_SCROLL", "OPEN"]:
+                if split_line[0] in ["STRING", "DELAY", "TAP", "PRESS", "RELEASE", "TOGGLE_KEY_COLOR", "WEB", "WEB_NEW", "CODE", "SOUND", "M_MOVE", "M_SET", "M_SCROLL", "OPEN"]:
                     if len(split_line) < 2:
                         return ("Too few arguments for command '" + split_line[0] + "'.", line)
                 if split_line[0] in ["WAIT_UNPRESSED", "RELEASE_ALL", "RESET_REPEATS"]:
@@ -685,6 +712,18 @@ def validate_script(script_str):
                 if split_line[0] in ["TAP", "PRESS", "RELEASE"]:
                     if kb.sp(split_line[1]) == None:
                         return ("No key named '" + split_line[1] + "'.", line)
+                if split_line[0] == "TOGGLE_KEY_COLOR":
+                    if len(split_line) != 8:
+                        return ("'TOGGLE_KEY_COLOR' requires exactly 7 arguments: key r_off g_off b_off r_on g_on b_on.", line)
+                    if kb.sp(split_line[1].lower()) == None:
+                        return ("No key named '" + split_line[1] + "'.", line)
+                    for idx, color_val in enumerate(split_line[2:8]):
+                        try:
+                            color_int = int(color_val)
+                        except:
+                            return ("'TOGGLE_KEY_COLOR' color argument " + str(idx + 1) + " ('" + color_val + "') is not valid.", line)
+                        if (color_int < 0) or (color_int > 255):
+                            return ("'TOGGLE_KEY_COLOR' color argument " + str(idx + 1) + " ('" + color_val + "') must be between 0 and 255.", line)
                 if split_line[0] == "DELAY":
                     try:
                         temp = float(split_line[1])
